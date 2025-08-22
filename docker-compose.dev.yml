@@ -1,0 +1,48 @@
+# Docker Compose para desenvolvimento com hot reload
+version: '3.8'
+
+services:
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: micro_stake_postgres_dev
+    environment:
+      POSTGRES_USER: micro_stake_user
+      POSTGRES_PASSWORD: micro_stake_password
+      POSTGRES_DB: micro_stake_db
+    ports:
+      - "5433:5432"  # Porta diferente para não conflitar com produção
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - micro_stake_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U micro_stake_user -d micro_stake_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Cache Redis
+  redis:
+    image: redis:7-alpine
+    container_name: micro_stake_redis_dev
+    ports:
+      - "6380:6379"  # Porta diferente para não conflitar com produção
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - micro_stake_dev_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+networks:
+  micro_stake_dev_network:
+    driver: bridge
