@@ -7,24 +7,42 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 type mockAuthService struct {
-	SignUpFunc      func(req SignUpRequest) (*SignUpResponse, error)
-	LoginFunc       func(req LoginRequest) (string, error)
-	GenerateJWTFunc func(userID int64, userEmail string) (string, error)
+	SignUpFunc               func(req SignUpRequest) (*SignUpResponse, error)
+	LoginFunc                func(req LoginRequest) (*LoginResponse, error)
+	GenerateAccessTokenFunc  func(userID int64, userEmail string, expiresAt time.Time) (string, error)
+	GenerateRefreshTokenFunc func(userID int64, expiresAt time.Time) (string, error)
+	RefreshTokenFunc         func(req RefreshTokenRequest) (*RefreshTokenResponse, error)
 }
 
 func (m *mockAuthService) SignUp(req SignUpRequest) (*SignUpResponse, error) {
 	return m.SignUpFunc(req)
 }
-func (m *mockAuthService) Login(req LoginRequest) (string, error) {
+func (m *mockAuthService) Login(req LoginRequest) (*LoginResponse, error) {
 	return m.LoginFunc(req)
 }
-func (m *mockAuthService) GenerateJWT(userID int64, userEmail string) (string, error) {
-	return m.GenerateJWTFunc(userID, userEmail)
+func (m *mockAuthService) GenerateAccessToken(userID int64, userEmail string, expiresAt time.Time) (string, error) {
+	if m.GenerateAccessTokenFunc != nil {
+		return m.GenerateAccessTokenFunc(userID, userEmail, expiresAt)
+	}
+	return "", nil
+}
+func (m *mockAuthService) GenerateRefreshToken(userID int64, expiresAt time.Time) (string, error) {
+	if m.GenerateRefreshTokenFunc != nil {
+		return m.GenerateRefreshTokenFunc(userID, expiresAt)
+	}
+	return "", nil
+}
+func (m *mockAuthService) RefreshToken(req RefreshTokenRequest) (*RefreshTokenResponse, error) {
+	if m.RefreshTokenFunc != nil {
+		return m.RefreshTokenFunc(req)
+	}
+	return nil, nil
 }
 
 func TestAuthHandler_SignUp(t *testing.T) {
@@ -58,8 +76,13 @@ func TestAuthHandler_SignUp(t *testing.T) {
 
 func TestAuthHandler_Login(t *testing.T) {
 	mockService := &mockAuthService{
-		LoginFunc: func(req LoginRequest) (string, error) {
-			return "jwt-token", nil
+		LoginFunc: func(req LoginRequest) (*LoginResponse, error) {
+			return &LoginResponse{
+				AccessToken:  "jwt-access-token",
+				RefreshToken: "jwt-refresh-token",
+				ExpiresIn:    1800,
+				ExpiresAt:    time.Now().Add(30 * time.Minute).Format(time.RFC3339),
+			}, nil
 		},
 	}
 	handler := NewAuthHandler(mockService)
@@ -119,8 +142,8 @@ func TestAuthHandler_SignUp_ServiceError(t *testing.T) {
 
 func TestAuthHandler_Login_InvalidPayload(t *testing.T) {
 	mockService := &mockAuthService{
-		LoginFunc: func(req LoginRequest) (string, error) {
-			return "", nil
+		LoginFunc: func(req LoginRequest) (*LoginResponse, error) {
+			return nil, nil
 		},
 	}
 	handler := NewAuthHandler(mockService)
@@ -136,8 +159,8 @@ func TestAuthHandler_Login_InvalidPayload(t *testing.T) {
 
 func TestAuthHandler_Login_ServiceError(t *testing.T) {
 	mockService := &mockAuthService{
-		LoginFunc: func(req LoginRequest) (string, error) {
-			return "", errors.New("invalid credentials")
+		LoginFunc: func(req LoginRequest) (*LoginResponse, error) {
+			return nil, errors.New("invalid credentials")
 		},
 	}
 	handler := NewAuthHandler(mockService)
@@ -151,6 +174,64 @@ func TestAuthHandler_Login_ServiceError(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	handler.Login(w, req)
+	resp := w.Result()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestAuthHandler_RefreshToken_Success(t *testing.T) {
+	mockService := &mockAuthService{
+		RefreshTokenFunc: func(req RefreshTokenRequest) (*RefreshTokenResponse, error) {
+			return &RefreshTokenResponse{
+				AccessToken:  "jwt-access-token",
+				RefreshToken: "jwt-refresh-token",
+				ExpiresIn:    1800,
+				ExpiresAt:    time.Now().Add(30 * time.Minute).Format(time.RFC3339),
+			}, nil
+		},
+	}
+	handler := NewAuthHandler(mockService)
+
+	payload := RefreshTokenRequest{
+		RefreshToken: "valid-refresh-token",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.RefreshToken(w, req)
+	resp := w.Result()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestAuthHandler_RefreshToken_InvalidPayload(t *testing.T) {
+	mockService := &mockAuthService{}
+	handler := NewAuthHandler(mockService)
+
+	body := []byte(`{"refresh_token": 123}`) // refresh_token como int, inválido
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.RefreshToken(w, req)
+	resp := w.Result()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestAuthHandler_RefreshToken_ServiceError(t *testing.T) {
+	mockService := &mockAuthService{
+		RefreshTokenFunc: func(req RefreshTokenRequest) (*RefreshTokenResponse, error) {
+			return nil, errors.New("invalid refresh token")
+		},
+	}
+	handler := NewAuthHandler(mockService)
+
+	payload := RefreshTokenRequest{
+		RefreshToken: "invalid-refresh-token",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.RefreshToken(w, req)
 	resp := w.Result()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

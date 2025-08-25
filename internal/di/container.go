@@ -4,6 +4,7 @@ import (
 	"gorm.io/gorm"
 
 	"micro-stake/internal/auth"
+	authpostgres "micro-stake/internal/auth/postgres"
 	"micro-stake/internal/config"
 	"micro-stake/internal/user/postgres"
 	"micro-stake/pkg/logger"
@@ -46,7 +47,8 @@ func (c *Container) GetLogger() logger.Logger {
 func (c *Container) GetAuthService() auth.AuthService {
 	if c.authService == nil {
 		repo := postgres.NewUserRepository(c.GetDB())
-		c.authService = auth.NewAuthService(repo, c.GetConfig().JWT)
+		refreshRepo := authpostgres.NewRefreshTokenRepository(c.GetDB())
+		c.authService = auth.NewAuthService(repo, c.GetConfig().JWT, refreshRepo)
 	}
 	return c.authService
 }

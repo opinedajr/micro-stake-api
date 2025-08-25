@@ -62,7 +62,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	token, err := h.service.Login(req)
+	resp, err := h.service.Login(req)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -76,7 +76,44 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"data":    map[string]string{"token": token},
+		"data":    resp,
 		"message": "Login successful",
+	})
+}
+
+// Handle refresh token
+func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var req RefreshTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error": map[string]interface{}{
+				"code":    "INVALID_PAYLOAD",
+				"message": "Invalid request body",
+			},
+		})
+		return
+	}
+	// Preenche campos extras do request
+	req.UserAgent = r.Header.Get("User-Agent")
+	req.IPAddress = r.RemoteAddr
+	req.DeviceID = r.Header.Get("X-Device-ID")
+	resp, err := h.service.RefreshToken(req)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error": map[string]interface{}{
+				"code":    "REFRESH_ERROR",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    resp,
+		"message": "Refresh successful",
 	})
 }

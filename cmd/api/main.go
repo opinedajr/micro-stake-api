@@ -121,6 +121,7 @@ func setupRoutes(container *di.Container) http.Handler {
 	authHandler := container.GetAuthHandler()
 	mux.HandleFunc("/api/v1/auth/signup", authHandler.SignUp)
 	mux.HandleFunc("/api/v1/auth/login", authHandler.Login)
+	mux.HandleFunc("/api/v1/auth/refresh", authHandler.RefreshToken)
 
 	return mux
 }

@@ -28,3 +28,12 @@ func (r *PostgresUserRepository) GetUserByEmail(email string) (*user.User, error
 	}
 	return &u, nil
 }
+
+func (r *PostgresUserRepository) GetUserByID(id int64) (*user.User, error) {
+	var u user.User
+	err := r.db.Where("id = ?", id).First(&u).Error
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}

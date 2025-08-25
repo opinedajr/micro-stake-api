@@ -32,8 +32,9 @@ type RedisConfig struct {
 }
 
 type JWTConfig struct {
-	Secret          string
-	ExpirationHours int
+	Secret                string
+	ExpirationHours       int
+	RefreshExpirationDays int
 }
 
 type ServerConfig struct {
@@ -72,8 +73,9 @@ func Load() (*Config, error) {
 			Password: getEnv("REDIS_PASSWORD", ""),
 		},
 		JWT: JWTConfig{
-			Secret:          getEnv("JWT_SECRET", "your-super-secret-jwt-key-here"),
-			ExpirationHours: getEnvAsInt("JWT_EXPIRATION_HOURS", 24),
+			Secret:                getEnv("JWT_SECRET", "your-super-secret-jwt-key-here"),
+			ExpirationHours:       getEnvAsInt("JWT_EXPIRATION_HOURS", 24),
+			RefreshExpirationDays: getEnvAsInt("JWT_REFRESH_EXPIRATION_DAYS", 15),
 		},
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
@@ -111,6 +113,10 @@ func (c *Config) GetServerAddr() string {
 
 func (c *Config) GetJWTExpiration() time.Duration {
 	return time.Duration(c.JWT.ExpirationHours) * time.Hour
+}
+
+func (c *Config) GetJWTRefreshExpiration() time.Duration {
+	return time.Duration(c.JWT.RefreshExpirationDays) * 24 * time.Hour
 }
 
 func (c *Config) IsProduction() bool {
